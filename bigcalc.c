@@ -6,7 +6,6 @@ static int bigcalc_int_get(void *p, Janet key, Janet *out);
 static int bigcalc_int_gc(void *p, size_t len) {
   (void)len;
   mp_int *b = (mp_int *)p;
-  // GCTOTALS -= mp->alloc;
   mp_clear(b);
   return 0;
 }
@@ -22,7 +21,7 @@ static void bigcalc_int_to_string(void *p, JanetBuffer *buf) {
   if (mp_toradix_n(b, buf->data + buf->count, 10, sz) != MP_OKAY)
     janet_panic("unable to format string");
 
-  buf->count += sz;
+  buf->count += (sz - 1);
 }
 
 static int32_t bigcalc_int_hash(void *p, size_t size) {
@@ -76,11 +75,11 @@ static mp_int *bigcalc_coerce_janet_to_int(Janet *argv, int i) {
   }
   // TODO u64/s64 types.
   default:
-    // XXX print type properly.
-    janet_panicf("unable to coerce slot #%d big int", i);
+    janet_panicf("unable to coerce slot #%d to big int", i);
     break;
   }
 
+  janet_gcpressure(b->alloc);
   return b;
 }
 
@@ -109,27 +108,38 @@ static Janet bigcalc_int(int32_t argc, Janet *argv) {
     janet_panic("unable to initialize big int from provided type");
     break;
   }
-
+  janet_gcpressure(b->alloc);
   return janet_wrap_abstract(b);
 }
 
 #define BIGINT_OPMETHOD(name, op)                                              \
   static Janet bigcalc_int_##name(int32_t argc, Janet *argv) {                 \
     mp_err err;                                                                \
-    janet_arity(argc, 2, -1);                                                  \
-    mp_int *r = janet_abstract(&bigcalc_int_type, sizeof(mp_int));             \
-    if (mp_init(r) != MP_OKAY)                                                 \
+    janet_fixarity(argc, 2);                                                   \
+    mp_int *c = janet_abstract(&bigcalc_int_type, sizeof(mp_int));             \
+    if (mp_init(c) != MP_OKAY)                                                 \
       abort();                                                                 \
-    if ((err =                                                                 \
-             mp_copy((mp_int *)janet_getabstract(argv, 0, &bigcalc_int_type),  \
-                     r)) != MP_OKAY)                                           \
+    mp_int *a = (mp_int *)janet_getabstract(argv, 0, &bigcalc_int_type);       \
+    mp_int *b = bigcalc_coerce_janet_to_int(argv, 1);                          \
+    if ((err = mp_##op(a, b, c)) != MP_OKAY)                                   \
       janet_panicf("%s", mp_error_to_string(err));                             \
-    for (int i = 1; i < argc; i++) {                                           \
-      mp_int *b = bigcalc_coerce_janet_to_int(argv, i);                        \
-      if ((err = mp_##op(r, b, r)) != MP_OKAY)                                 \
-        janet_panicf("%s", mp_error_to_string(err));                           \
-    }                                                                          \
-    return janet_wrap_abstract(r);                                             \
+    janet_gcpressure(c->alloc);                                                \
+    return janet_wrap_abstract(c);                                             \
+  }
+
+#define BIGINT_ROPMETHOD(name, op)                                             \
+  static Janet bigcalc_int_##name(int32_t argc, Janet *argv) {                 \
+    mp_err err;                                                                \
+    janet_fixarity(argc, 2);                                                   \
+    mp_int *c = janet_abstract(&bigcalc_int_type, sizeof(mp_int));             \
+    if (mp_init(c) != MP_OKAY)                                                 \
+      abort();                                                                 \
+    mp_int *b = (mp_int *)janet_getabstract(argv, 0, &bigcalc_int_type);       \
+    mp_int *a = bigcalc_coerce_janet_to_int(argv, 1);                          \
+    if ((err = mp_##op(a, b, c)) != MP_OKAY)                                   \
+      janet_panicf("%s", mp_error_to_string(err));                             \
+    janet_gcpressure(c->alloc);                                                \
+    return janet_wrap_abstract(c);                                             \
   }
 
 BIGINT_OPMETHOD(add, add)
@@ -138,36 +148,90 @@ BIGINT_OPMETHOD(mul, mul)
 BIGINT_OPMETHOD(and, and)
 BIGINT_OPMETHOD(or, or)
 BIGINT_OPMETHOD (xor, xor)
+BIGINT_ROPMETHOD(radd, add)
+BIGINT_ROPMETHOD(rsub, sub)
+BIGINT_ROPMETHOD(rmul, mul)
+BIGINT_ROPMETHOD(rand, and)
+BIGINT_ROPMETHOD(ror, or)
+BIGINT_ROPMETHOD(rxor, xor)
 
 static Janet bigcalc_int_div(int32_t argc, Janet *argv) {
   mp_err err;
-  janet_arity(argc, 2, -1);
+  janet_fixarity(argc, 2);
   mp_int *r = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
   if (mp_init(r) != MP_OKAY)
     abort();
   mp_int *d = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
   if (mp_init(d) != MP_OKAY)
     abort();
-  if ((err = mp_copy((mp_int *)janet_getabstract(argv, 0, &bigcalc_int_type),
-                     r)) != MP_OKAY)
-    janet_panicf("error during calculation: %s", mp_error_to_string(err));
+  mp_int *a = janet_getabstract(argv, 0, &bigcalc_int_type);
+  mp_int *b = bigcalc_coerce_janet_to_int(argv, 1);
+  if ((err = mp_div(a, b, d, r)) != MP_OKAY)
+    janet_panicf("%s", mp_error_to_string(err));
+  janet_gcpressure(d->alloc);
+  return janet_wrap_abstract(d);
+}
+static Janet bigcalc_int_rdiv(int32_t argc, Janet *argv) {
+  mp_err err;
+  janet_fixarity(argc, 2);
+  mp_int *r = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
+  if (mp_init(r) != MP_OKAY)
+    abort();
+  mp_int *d = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
+  if (mp_init(d) != MP_OKAY)
+    abort();
+  mp_int *b = janet_getabstract(argv, 0, &bigcalc_int_type);
+  mp_int *a = bigcalc_coerce_janet_to_int(argv, 1);
+  if ((err = mp_div(a, b, d, r)) != MP_OKAY)
+    janet_panicf("%s", mp_error_to_string(err));
+  janet_gcpressure(d->alloc);
+  return janet_wrap_abstract(d);
+}
 
-  for (int i = 1; i < argc; i++) {
-    mp_int *b = bigcalc_coerce_janet_to_int(argv, i);
-    if ((err = mp_div(r, b, r, d)) != MP_OKAY)
-      janet_panicf("error during calculation: %s", mp_error_to_string(err));
-  }
-  return janet_wrap_abstract(r);
+static Janet bigcalc_int_mod(int32_t argc, Janet *argv) {
+  mp_err err;
+  janet_fixarity(argc, 2);
+  mp_int *c = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
+  if (mp_init(c) != MP_OKAY)
+    abort();
+  mp_int *a = janet_getabstract(argv, 0, &bigcalc_int_type);
+  mp_int *b = bigcalc_coerce_janet_to_int(argv, 1);
+  if ((err = mp_mod(a, b, c)) != MP_OKAY)
+    janet_panicf("%s", mp_error_to_string(err));
+  janet_gcpressure(c->alloc);
+  return janet_wrap_abstract(c);
+}
+
+static Janet bigcalc_int_rmod(int32_t argc, Janet *argv) {
+  mp_err err;
+  janet_fixarity(argc, 2);
+  mp_int *c = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
+  if (mp_init(c) != MP_OKAY)
+    abort();
+  mp_int *b = janet_getabstract(argv, 0, &bigcalc_int_type);
+  mp_int *a = bigcalc_coerce_janet_to_int(argv, 1);
+  if ((err = mp_mod(a, b, c)) != MP_OKAY)
+    janet_panicf("%s", mp_error_to_string(err));
+  janet_gcpressure(c->alloc);
+  return janet_wrap_abstract(c);
 }
 
 static JanetMethod bigcalc_int_methods[] = {{"+", bigcalc_int_add},
                                             {"-", bigcalc_int_sub},
                                             {"*", bigcalc_int_mul},
                                             {"/", bigcalc_int_div},
-                                            //{"%", bigcalc_int_mod},
+                                            {"%", bigcalc_int_mod},
                                             {"&", bigcalc_int_and},
                                             {"|", bigcalc_int_or},
                                             {"^", bigcalc_int_xor},
+                                            {"r+", bigcalc_int_radd},
+                                            {"r-", bigcalc_int_rsub},
+                                            {"r*", bigcalc_int_rmul},
+                                            {"r/", bigcalc_int_rdiv},
+                                            {"r%", bigcalc_int_rmod},
+                                            {"r&", bigcalc_int_rand},
+                                            {"r|", bigcalc_int_ror},
+                                            {"r^", bigcalc_int_rxor},
                                             //{"<<", bigcalc_int_lshift},
                                             //{">>", bigcalc_int_rshift},
                                             {NULL, NULL}};
