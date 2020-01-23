@@ -39,14 +39,46 @@ static int big_int_compare(void *p1, void *p2) {
   return mp_cmp(x, y);
 }
 
+static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
+  mp_int *b = (mp_int *)p;
+  int sz;
+  if (mp_radix_size(b, 10, &sz) != MP_OKAY)
+    abort();
+  if (sz < 0)
+    abort();
+  janet_marshal_abstract(ctx, p);
+  uint8_t *bytes = janet_smalloc(sz);
+  if (mp_toradix_n(b, bytes, 10, sz) != MP_OKAY)
+    abort();
+  janet_marshal_size(ctx, sz);
+  janet_marshal_bytes(ctx, bytes, sz);
+  janet_sfree(bytes);
+}
+
+static void *big_int_unmarshal(JanetMarshalContext *ctx) {
+  mp_err err;
+  mp_int *b = janet_unmarshal_abstract(ctx, sizeof(mp_int));
+  if (mp_init(b) != MP_OKAY)
+    abort();
+  size_t sz = janet_unmarshal_size(ctx);
+  uint8_t *bytes = janet_smalloc(sz);
+  janet_unmarshal_bytes(ctx, bytes, sz);
+  if (bytes[sz - 1] != 0)
+    janet_panic("invalid big/int data");
+  if ((err = mp_read_radix(b, bytes, 10)) != MP_OKAY)
+    janet_panicf("unable to unmarshal big/int: %s", mp_error_to_string(err));
+  janet_sfree(bytes);
+  return b;
+}
+
 static const JanetAbstractType big_int_type = {
     "big/int",
     big_int_gc,
     NULL,
     big_int_get,
     NULL,
-    NULL, // big_int_marshal,
-    NULL, // big_int_unmarshal,
+    big_int_marshal,
+    big_int_unmarshal,
     big_int_to_string,
     big_int_compare,
     big_int_hash,
@@ -117,14 +149,14 @@ static Janet big_int(int32_t argc, Janet *argv) {
 }
 
 #define BIGINT_OPMETHOD(NAME, OP, L, R)                                        \
-  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                 \
+  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
     mp_err err;                                                                \
     janet_fixarity(argc, 2);                                                   \
-    mp_int *c = janet_abstract(&big_int_type, sizeof(mp_int));             \
+    mp_int *c = janet_abstract(&big_int_type, sizeof(mp_int));                 \
     if (mp_init(c) != MP_OKAY)                                                 \
       abort();                                                                 \
-    mp_int *L = (mp_int *)janet_getabstract(argv, 0, &big_int_type);       \
-    mp_int *R = big_coerce_janet_to_int(argv, 1);                          \
+    mp_int *L = (mp_int *)janet_getabstract(argv, 0, &big_int_type);           \
+    mp_int *R = big_coerce_janet_to_int(argv, 1);                              \
     if ((err = mp_##OP(a, b, c)) != MP_OKAY)                                   \
       janet_panicf("%s", mp_error_to_string(err));                             \
     janet_gcpressure(c->alloc);                                                \
@@ -132,17 +164,17 @@ static Janet big_int(int32_t argc, Janet *argv) {
   }
 
 #define BIGINT_DIVMODMETHOD(NAME, L, R, RET)                                   \
-  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                 \
+  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
     mp_err err;                                                                \
     janet_fixarity(argc, 2);                                                   \
-    mp_int *r = janet_abstract(&big_int_type, sizeof(mp_int));             \
+    mp_int *r = janet_abstract(&big_int_type, sizeof(mp_int));                 \
     if (mp_init(r) != MP_OKAY)                                                 \
       abort();                                                                 \
-    mp_int *d = janet_abstract(&big_int_type, sizeof(mp_int));             \
+    mp_int *d = janet_abstract(&big_int_type, sizeof(mp_int));                 \
     if (mp_init(d) != MP_OKAY)                                                 \
       abort();                                                                 \
-    mp_int *L = janet_getabstract(argv, 0, &big_int_type);                 \
-    mp_int *R = big_coerce_janet_to_int(argv, 1);                          \
+    mp_int *L = janet_getabstract(argv, 0, &big_int_type);                     \
+    mp_int *R = big_coerce_janet_to_int(argv, 1);                              \
     if ((err = mp_div(a, b, d, r)) != MP_OKAY)                                 \
       janet_panicf("%s", mp_error_to_string(err));                             \
     janet_gcpressure(d->alloc);                                                \
@@ -169,24 +201,24 @@ BIGINT_OPMETHOD(ror, or, b, a)
 BIGINT_OPMETHOD(rxor, xor, b, a)
 
 static JanetMethod big_int_methods[] = {{"+", big_int_add},
-                                            {"-", big_int_sub},
-                                            {"*", big_int_mul},
-                                            {"/", big_int_div},
-                                            {"%", big_int_mod},
-                                            {"&", big_int_and},
-                                            {"|", big_int_or},
-                                            {"^", big_int_xor},
-                                            {"r+", big_int_radd},
-                                            {"r-", big_int_rsub},
-                                            {"r*", big_int_rmul},
-                                            {"r/", big_int_rdiv},
-                                            {"r%", big_int_rmod},
-                                            {"r&", big_int_rand},
-                                            {"r|", big_int_ror},
-                                            {"r^", big_int_rxor},
-                                            //{"<<", big_int_lshift},
-                                            //{">>", big_int_rshift},
-                                            {NULL, NULL}};
+                                        {"-", big_int_sub},
+                                        {"*", big_int_mul},
+                                        {"/", big_int_div},
+                                        {"%", big_int_mod},
+                                        {"&", big_int_and},
+                                        {"|", big_int_or},
+                                        {"^", big_int_xor},
+                                        {"r+", big_int_radd},
+                                        {"r-", big_int_rsub},
+                                        {"r*", big_int_rmul},
+                                        {"r/", big_int_rdiv},
+                                        {"r%", big_int_rmod},
+                                        {"r&", big_int_rand},
+                                        {"r|", big_int_ror},
+                                        {"r^", big_int_rxor},
+                                        //{"<<", big_int_lshift},
+                                        //{">>", big_int_rshift},
+                                        {NULL, NULL}};
 
 static int big_int_get(void *p, Janet key, Janet *out) {
   (void)p;
@@ -200,4 +232,7 @@ static const JanetReg cfuns[] = {{"int", big_int,
                                   "Create a new integer."},
                                  {NULL, NULL, NULL}};
 
-JANET_MODULE_ENTRY(JanetTable *env) { janet_cfuns(env, "big", cfuns); }
+JANET_MODULE_ENTRY(JanetTable *env) {
+  janet_cfuns(env, "big", cfuns);
+  janet_register_abstract_type(&big_int_type);
+}
