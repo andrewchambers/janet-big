@@ -84,12 +84,16 @@ static mp_int *bigcalc_coerce_janet_to_int(Janet *argv, int i) {
 }
 
 static Janet bigcalc_int(int32_t argc, Janet *argv) {
-  mp_err err;
   janet_fixarity(argc, 1);
+
+  if (janet_checkabstract(argv[0], &bigcalc_int_type))
+    return argv[0];
 
   mp_int *b = janet_abstract(&bigcalc_int_type, sizeof(mp_int));
   if (mp_init(b) != MP_OKAY)
     abort(); /* Simpler to ignore out of memory in this code path for now. */
+
+  mp_err err;
 
   switch (janet_type(argv[0])) {
   case JANET_NUMBER:
@@ -156,7 +160,7 @@ BIGINT_OPMETHOD(sub, sub, a, b)
 BIGINT_OPMETHOD(mul, mul, a, b)
 BIGINT_OPMETHOD(and, and, a, b)
 BIGINT_OPMETHOD(or, or, a, b)
-BIGINT_OPMETHOD(xor, xor, a, b)
+BIGINT_OPMETHOD (xor, xor, a, b)
 BIGINT_OPMETHOD(radd, add, b, a)
 BIGINT_OPMETHOD(rsub, sub, b, a)
 BIGINT_OPMETHOD(rmul, mul, b, a)

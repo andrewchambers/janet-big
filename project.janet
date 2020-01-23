@@ -1,9 +1,9 @@
 (declare-project
-  :name "bigcalc"
+  :name "big"
   :author "Andrew Chambers"
   :license "MIT"
-  :url "https://github.com/andrewchambers/janet-bigcalc"
-  :repo "git+https://github.com/andrewchambers/janet-bigcalc.git")
+  :url "https://github.com/andrewchambers/janet-big"
+  :repo "git+https://github.com/andrewchambers/janet-big.git")
 
 (defn pkg-config [what]
   (def f (file/popen (string "pkg-config " what)))
@@ -16,7 +16,7 @@
   v)
 
 (declare-native
-    :name "bigcalc"
+    :name "big"
     :cflags (pkg-config "libtommath --cflags")
     :lflags (pkg-config "libtommath --libs")
-    :source ["bigcalc.c"])
+    :source ["big.c"])

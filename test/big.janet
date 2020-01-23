@@ -1,4 +1,4 @@
-(import ../build/bigcalc :as big)
+(import ../build/big :as big)
 
 (assert (= (string (+ (big/int 1) (big/int "2") 3)) "6"))
 (assert (= (string (+ 1 (big/int 1))) "2"))
