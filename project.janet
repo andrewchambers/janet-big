@@ -13,10 +13,10 @@
            (string/split " ")))
   (unless (zero? (file/close f))
     (error "pkg-config failed!"))
-  v)
+  (filter (complement empty?) v))
 
 (declare-native
     :name "big"
-    :cflags (pkg-config "libtommath --cflags")
-    :lflags (pkg-config "libtommath --libs")
+    :cflags [;default-cflags ;(pkg-config "libtommath --cflags")]
+    :lflags [;default-lflags ;(pkg-config "libtommath --libs")]
     :source ["big.c"])
