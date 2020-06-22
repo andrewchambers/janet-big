@@ -18,17 +18,18 @@ static void big_int_to_string(void *p, JanetBuffer *buf) {
 
   janet_buffer_extra(buf, sz);
 
-  if (mp_toradix_n(b, buf->data + buf->count, 10, sz) != MP_OKAY)
+  if (mp_to_radix(b, (char *)(buf->data + buf->count), sz, NULL, 10) != MP_OKAY)
     janet_panic("unable to format string");
 
   buf->count += (sz - 1);
 }
 
 static int32_t big_int_hash(void *p, size_t size) {
+  (void) size;
   mp_int *b = (mp_int *)p;
   uint32_t hash = 5381;
-  for (size_t i = 0; i < USED(b); i++) {
-    hash = (hash << 5) + hash + ((char)DIGIT(b, i));
+  for (int i = 0; i < b->used; i++) {
+    hash = (hash << 5) + hash + ((char)(b->dp[i]));
   }
   return (int32_t)hash;
 }
@@ -48,7 +49,7 @@ static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
     abort();
   janet_marshal_abstract(ctx, p);
   uint8_t *bytes = janet_smalloc(sz);
-  if (mp_toradix_n(b, bytes, 10, sz) != MP_OKAY)
+  if (mp_to_radix(b, (char *) bytes, sz, NULL, 10) != MP_OKAY)
     abort();
   janet_marshal_size(ctx, sz);
   janet_marshal_bytes(ctx, bytes, sz);
@@ -65,7 +66,7 @@ static void *big_int_unmarshal(JanetMarshalContext *ctx) {
   janet_unmarshal_bytes(ctx, bytes, sz);
   if (bytes[sz - 1] != 0)
     janet_panic("invalid big/int data");
-  if ((err = mp_read_radix(b, bytes, 10)) != MP_OKAY)
+  if ((err = mp_read_radix(b, (char *) bytes, 10)) != MP_OKAY)
     janet_panicf("unable to unmarshal big/int: %s", mp_error_to_string(err));
   janet_sfree(bytes);
   return b;
@@ -82,6 +83,7 @@ static const JanetAbstractType big_int_type = {
     big_int_to_string,
     big_int_compare,
     big_int_hash,
+    JANET_ATEND_HASH
 };
 
 static mp_int *big_coerce_janet_to_int(Janet *argv, int i) {
