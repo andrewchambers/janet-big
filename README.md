@@ -1,4 +1,4 @@
-# bigcalc
+# big
 
 A big calculator library for janet. Currently only big integers are supported.
 
@@ -9,7 +9,7 @@ Currently links to libtommath, though this may change in the future.
 # Quick Examples
 
 ```
-(import bigcalc)
+(import big)
 
-(+ (bigcalc/int "999999999999999999999999999999999999999999") 1)
+(+ (big/int "999999999999999999999999999999999999999999") 1)
 ```
