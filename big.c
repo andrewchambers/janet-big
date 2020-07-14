@@ -8,6 +8,9 @@ static bf_context_t bf_ctx; // is this ok?  threads? &&&
 #error janet-big requires libbf with LIMB_BITS = 64
 #endif
 
+#define BITS_PER_DIGIT_MAX 4  // upper bound bits per decimal digit
+#define BITS_PER_DIGIT_MIN 3  // lower bound bits per decimal digit
+
 static void *big_bf_realloc(void *opaque, void *ptr, size_t size) {
   (void) opaque;
   // All libbf internal allocations and frees go through this point.
@@ -36,7 +39,7 @@ static void big_int_to_string(void *p, JanetBuffer *buf) {
   size_t sz;
   // Works only for 64-bit limb_t so we checked during compilation
   // Estimated precision -- can be too high it's ok
-  size_t prec = b->len * 64 / 3; // bits per decimal digit is 3.32
+  size_t prec = b->len * 64 / BITS_PER_DIGIT_MIN;
   char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
   if (digits == 0)
     janet_panic("unable to format big/int");
@@ -74,7 +77,8 @@ static int big_int_compare(void *p1, void *p2) {
 static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
   bf_t *b = (bf_t *) p;
   size_t sz;
-  char *digits = bf_ftoa(&sz, b, 10, BF_PREC_MAX, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
+  size_t prec = b->len * 64 / BITS_PER_DIGIT_MIN;
+  char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
   if (digits == 0)
     janet_panic("unable to marshall big/int");
   janet_marshal_abstract(ctx, p);
@@ -90,7 +94,8 @@ static void *big_int_unmarshal(JanetMarshalContext *ctx) {
   if (bytes[sz-1] != 0)
     janet_panicf("invalid big/int data in unmarshall");
   janet_unmarshal_bytes(ctx, bytes, sz);
-  if (0 == bf_atof(b, (char *)bytes, 0, 10, BF_PREC_MAX, BF_ATOF_NO_NAN_INF))
+  size_t prec = sz * BITS_PER_DIGIT_MAX;
+  if (0 == bf_atof(b, (char *)bytes, 0, 10, prec, BF_ATOF_NO_NAN_INF))
     janet_panicf("unable to unmarshal big/int");
   janet_sfree(bytes);
   return b;
@@ -123,7 +128,8 @@ static bf_t *big_coerce_janet_to_int(Janet *argv, int i) {
     break;
   case JANET_STRING: {
     JanetString s = janet_unwrap_string(argv[i]);
-    if (0 == bf_atof(b, (char *)s, 0, 10, BF_PREC_MAX, BF_ATOF_NO_NAN_INF))
+    size_t prec = janet_string_length(s) * BITS_PER_DIGIT_MAX; // &&&
+    if (0 == bf_atof(b, (char *)s, 0, 10, prec, BF_ATOF_NO_NAN_INF))
       janet_panicf("unable to convert string to big/int");
     break;
   }
@@ -150,7 +156,8 @@ static Janet big_int(int32_t argc, Janet *argv) {
     break;
   case JANET_STRING: {
     JanetString s = janet_unwrap_string(argv[0]);
-    if (0 == bf_atof(b, (char *)s, 0, 10, BF_PREC_MAX, BF_ATOF_NO_NAN_INF))
+    size_t prec = janet_string_length(s) * BITS_PER_DIGIT_MAX; // &&&
+    if (0 == bf_atof(b, (char *)s, 0, 10, prec, BF_ATOF_NO_NAN_INF))
       janet_panicf("unable to convert string to big/int");
     break;
   }

@@ -3,6 +3,7 @@
 (def x (big/int 77))
 
 (print (string (big/int 77)))
+(print (string (big/int "77")))
 (assert (= "77" (string (big/int 77))))
 
 #(assert (= (unmarshal (marshal (big/int 4))) (big/int 4)))
