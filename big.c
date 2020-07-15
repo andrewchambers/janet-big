@@ -34,15 +34,23 @@ static int big_int_gc(void *p, size_t len) {
   return 0;
 }
 
-static void big_int_to_string(void *p, JanetBuffer *buf) {
-  bf_t *b = (bf_t *) p;
+static char *big_digits(bf_t *b, size_t *size) {
   size_t sz;
   // Works only for 64-bit limb_t so we checked during compilation
   // Estimated precision -- can be too high it's ok
   size_t prec = b->len * 64 / BITS_PER_DIGIT_MIN;
   char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
-  if (digits == 0)
-    janet_panic("unable to format big/int");
+  if (size != NULL)
+    *size = sz;
+  return digits;
+}
+
+static void big_int_to_string(void *p, JanetBuffer *buf) {
+  bf_t *b = (bf_t *) p;
+  size_t sz;
+  char *digits = big_digits(b, &sz);
+  if (digits == NULL)
+    janet_panic("unable to convert big/int to string");
   janet_buffer_push_cstring(buf, digits);
   bf_free(&bf_ctx, digits);
 }
@@ -77,26 +85,34 @@ static int big_int_compare(void *p1, void *p2) {
 static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
   bf_t *b = (bf_t *) p;
   size_t sz;
-  size_t prec = b->len * 64 / BITS_PER_DIGIT_MIN;
-  char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
+  char *digits = big_digits(b, &sz);
   if (digits == 0)
     janet_panic("unable to marshall big/int");
+  //printf("marshalling: '%s' %ld\n", digits, sz+1);
   janet_marshal_abstract(ctx, p);
   janet_marshal_size(ctx, sz+1);
   janet_marshal_bytes(ctx, (uint8_t *)digits, sz+1);
   bf_free(&bf_ctx, digits);
 }
 
+static int digits_to_big(bf_t *b, const uint8_t *bytes, size_t sz) {
+  size_t prec = sz * BITS_PER_DIGIT_MAX;
+  //printf("string is: %s\n", bytes);
+  int r = bf_atof(b, (char *)bytes, 0, 10, prec, BF_ATOF_NO_NAN_INF);
+  //bf_print_str("resulting bf", b);
+  return r;
+}
+
 static void *big_int_unmarshal(JanetMarshalContext *ctx) {
   bf_t *b = janet_unmarshal_abstract(ctx, sizeof(bf_t));
+  bf_init(&bf_ctx, b);
   size_t sz = janet_unmarshal_size(ctx);
   uint8_t *bytes = janet_smalloc(sz);
+  janet_unmarshal_bytes(ctx, bytes, sz);
   if (bytes[sz-1] != 0)
     janet_panicf("invalid big/int data in unmarshall");
-  janet_unmarshal_bytes(ctx, bytes, sz);
-  size_t prec = sz * BITS_PER_DIGIT_MAX;
-  if (0 == bf_atof(b, (char *)bytes, 0, 10, prec, BF_ATOF_NO_NAN_INF))
-    janet_panicf("unable to unmarshal big/int");
+  if (digits_to_big(b, bytes, sz) != 0)
+    janet_panic("unable to unmarshall big/int");
   janet_sfree(bytes);
   return b;
 }
@@ -124,12 +140,11 @@ static bf_t *big_coerce_janet_to_int(Janet *argv, int i) {
 
   switch (janet_type(argv[i])) {
   case JANET_NUMBER:
-    bf_set_si(b, (int64_t) janet_unwrap_number(argv[1]));
+    bf_set_si(b, (int64_t) janet_unwrap_number(argv[i]));
     break;
   case JANET_STRING: {
     JanetString s = janet_unwrap_string(argv[i]);
-    size_t prec = janet_string_length(s) * BITS_PER_DIGIT_MAX; // &&&
-    if (0 == bf_atof(b, (char *)s, 0, 10, prec, BF_ATOF_NO_NAN_INF))
+    if (digits_to_big(b, s, janet_string_length(s)) != 0)
       janet_panicf("unable to convert string to big/int");
     break;
   }
@@ -152,12 +167,11 @@ static Janet big_int(int32_t argc, Janet *argv) {
 
   switch (janet_type(argv[0])) {
   case JANET_NUMBER:
-    bf_set_si(b, (int64_t) janet_unwrap_number(argv[1]));
+    bf_set_si(b, (int64_t) janet_unwrap_number(argv[0]));
     break;
   case JANET_STRING: {
     JanetString s = janet_unwrap_string(argv[0]);
-    size_t prec = janet_string_length(s) * BITS_PER_DIGIT_MAX; // &&&
-    if (0 == bf_atof(b, (char *)s, 0, 10, prec, BF_ATOF_NO_NAN_INF))
+    if (digits_to_big(b, s, janet_string_length(s)) != 0)
       janet_panicf("unable to convert string to big/int");
     break;
   }
@@ -177,7 +191,11 @@ static Janet big_int(int32_t argc, Janet *argv) {
     bf_init(&bf_ctx, r);                                                       \
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
+    printf("op: %s name: %s\n", #OP, #NAME);\
+    bf_print_str("l", L);\
+    bf_print_str("r", R);\
     bf_##OP(r, L, R, BF_PREC_INF, BF_RNDN);                                    \
+    bf_print_str("res", r);\
     return janet_wrap_abstract(r);                                             \
   }
 

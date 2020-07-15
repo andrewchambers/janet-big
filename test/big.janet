@@ -1,16 +1,16 @@
 (import ../build/big :as big)
 
-(def x (big/int 77))
+#(def x (big/int 77))
 
-(print (string (big/int 77)))
-(print (string (big/int "77")))
-(assert (= "77" (string (big/int 77))))
+#(assert (= "77" (string (big/int 77))))
 
-#(assert (= (unmarshal (marshal (big/int 4))) (big/int 4)))
+#(assert (= (unmarshal (marshal (big/int "343517"))) (big/int 343517)))
 
 #(assert (= (string (+ (big/int 1) (big/int "2") 3)) "6"))
 #(assert (= (string (+ 1 (big/int 1))) "2"))
 
+#(assert (= (big/int 8) (* (big/int 4) 2)))
+(print (/ (big/int 4) 2))
 #(assert (= (string (/ 4 (big/int 2))) "2"))
 #(assert (= (string (/ (big/int 4) 2)) "2"))
 
