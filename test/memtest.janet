@@ -1,5 +1,12 @@
 (import ../build/big :as big)
 
+# This is a simplistic sort of memory test looking for failure to free.
+# It is just a repeat loop of the basic module tests which exercise many
+# of the features of the library.
+# Run it and watch in top if memory usage increases. -- it should not
+
+(repeat 1000000
+
 # stringification
 (assert (= "77" (string (big/int 77))))
 
@@ -69,3 +76,4 @@
 (assert (= (big/int 120) (fact 5)))
 (assert (= (fact 100) (big/int "93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000")))
 
+)

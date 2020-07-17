@@ -4,13 +4,6 @@
 
 static bf_context_t bf_ctx; // is this ok?  threads? &&&
 
-#if LIMB_BITS != 64
-#error janet-big requires libbf with LIMB_BITS = 64
-#endif
-
-#define BITS_PER_DIGIT_MAX 4  // upper bound bits per decimal digit
-#define BITS_PER_DIGIT_MIN 3  // lower bound bits per decimal digit
-
 static void *big_bf_realloc(void *opaque, void *ptr, size_t size) {
   (void) opaque;
   // All libbf internal allocations and frees go through this point.
@@ -36,9 +29,7 @@ static int big_int_gc(void *p, size_t len) {
 
 static char *big_digits(bf_t *b, size_t *size) {
   size_t sz;
-  // Works only for 64-bit limb_t so we checked during compilation
-  // Estimated precision -- can be too high it's ok
-  size_t prec = b->len * 64 / BITS_PER_DIGIT_MIN;
+  size_t prec = b->len * LIMB_BITS; // &&& correct? too high?
   char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
   if (size != NULL)
     *size = sz;
@@ -88,7 +79,6 @@ static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
   char *digits = big_digits(b, &sz);
   if (digits == 0)
     janet_panic("unable to marshall big/int");
-  //printf("marshalling: '%s' %ld\n", digits, sz+1);
   janet_marshal_abstract(ctx, p);
   janet_marshal_size(ctx, sz+1);
   janet_marshal_bytes(ctx, (uint8_t *)digits, sz+1);
@@ -96,9 +86,9 @@ static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
 }
 
 static int digits_to_big(bf_t *b, const uint8_t *bytes, size_t sz) {
-  size_t prec = sz * BITS_PER_DIGIT_MAX;
+  (void) sz;
   //printf("string is: %s\n", bytes);
-  int r = bf_atof(b, (char *)bytes, 0, 10, prec, BF_ATOF_NO_NAN_INF);
+  int r = bf_atof(b, (char *)bytes, 0, 10, BF_PREC_INF, BF_ATOF_NO_NAN_INF);
   //bf_print_str("resulting bf", b);
   return r;
 }
@@ -139,19 +129,29 @@ static bf_t *big_coerce_janet_to_int(Janet *argv, int i) {
   bf_init(&bf_ctx, b);
 
   switch (janet_type(argv[i])) {
-  case JANET_NUMBER:
-    bf_set_si(b, (int64_t) janet_unwrap_number(argv[i]));
-    break;
-  case JANET_STRING: {
-    JanetString s = janet_unwrap_string(argv[i]);
-    if (digits_to_big(b, s, janet_string_length(s)) != 0)
-      janet_panicf("unable to convert string to big/int");
-    break;
-  }
-  // TODO u64/s64 types.
-  default:
-    janet_panicf("unable to coerce slot #%d to big int", i);
-    break;
+    case JANET_NUMBER:
+      bf_set_si(b, (int64_t) janet_unwrap_number(argv[i]));
+      break;
+    case JANET_STRING: {
+       JanetString s = janet_unwrap_string(argv[i]);
+       if (digits_to_big(b, s, janet_string_length(s)) != 0)
+         janet_panicf("unable to convert string to big/int");
+       break;
+     }
+    case JANET_ABSTRACT: {
+       void *abst = janet_unwrap_abstract(argv[i]);
+       if (janet_abstract_type(abst) == &janet_s64_type) {
+         bf_set_si(b, *(int64_t *)abst);
+       } else if (janet_abstract_type(abst) == &janet_u64_type) {
+         bf_set_ui(b, *(uint64_t *)abst);
+       } else {
+         janet_panicf("unable to coerce slot #%d to big int", i);
+       }
+       break;
+     }
+    default:
+       janet_panicf("unable to coerce slot #%d to big int", i);
+       break;
   }
   return b;
 }
@@ -170,18 +170,86 @@ static Janet big_int(int32_t argc, Janet *argv) {
     bf_set_si(b, (int64_t) janet_unwrap_number(argv[0]));
     break;
   case JANET_STRING: {
-    JanetString s = janet_unwrap_string(argv[0]);
-    if (digits_to_big(b, s, janet_string_length(s)) != 0)
-      janet_panicf("unable to convert string to big/int");
-    break;
-  }
-  // TODO u64/s64 types.
+      JanetString s = janet_unwrap_string(argv[0]);
+      if (digits_to_big(b, s, janet_string_length(s)) != 0)
+        janet_panicf("unable to convert string to big/int");
+      break;
+    }
+  case JANET_ABSTRACT: {
+       void *abst = janet_unwrap_abstract(argv[0]);
+       if (janet_abstract_type(abst) == &janet_s64_type) {
+         bf_set_si(b, *(int64_t *)abst);
+       } else if (janet_abstract_type(abst) == &janet_u64_type) {
+         bf_set_ui(b, *(uint64_t *)abst);
+       } else {
+         janet_panicf("unable to initilize big int from provided type");
+       }
+       break;
+     }
   default:
     // XXX print type properly.
     janet_panic("unable to initialize big int from provided type");
     break;
   }
   return janet_wrap_abstract(b);
+}
+
+static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+
+  if (!janet_checkabstract(argv[0], &big_int_type))
+    janet_panic("compare method requires big/int as first argument");
+  bf_t *a = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
+
+  int r;
+  bf_t b;
+
+  switch (janet_type(argv[1])) {
+  case JANET_NUMBER:
+    bf_init(&bf_ctx, &b);
+    bf_set_si(&b, (int64_t) janet_unwrap_number(argv[1]));
+    r = bf_cmp(a, &b);
+    bf_delete(&b);
+    break;
+  case JANET_STRING: {
+      JanetString s = janet_unwrap_string(argv[1]);
+      bf_init(&bf_ctx, &b);
+      if (digits_to_big(&b, s, janet_string_length(s)) != 0) {
+        // should this be an error?  comparing big/int to non-numeric string
+        // this will fall back to primitive comparison which might surprise
+        // i.e. (< (big/int 7) "9") is true but (< (big/int 7) "x") uses
+        // Janet's built-in cmp which will compare based on type number
+        return janet_wrap_nil();
+      }
+      r = bf_cmp(a, &b);
+      bf_delete(&b);
+      break;
+    }
+  case JANET_ABSTRACT: {
+       void *abst = janet_unwrap_abstract(argv[1]);
+       if (janet_abstract_type(abst) == &janet_s64_type) {
+         bf_init(&bf_ctx, &b);
+         bf_set_si(&b, *(int64_t *)abst);
+         r = bf_cmp(a, &b);
+         bf_delete(&b);
+       } else if (janet_abstract_type(abst) == &janet_u64_type) {
+         bf_init(&bf_ctx, &b);
+         bf_set_ui(&b, *(uint64_t *)abst);
+         r = bf_cmp(a, &b);
+         bf_delete(&b);
+       } else if (janet_abstract_type(abst) == &big_int_type) {
+         bf_t *c = (bf_t *)janet_getabstract(argv, 1, &big_int_type);               \
+         r = bf_cmp(a, c);
+       } else {
+         return janet_wrap_nil();
+       }
+       break;
+     }
+  default:
+    return janet_wrap_nil();
+    break;
+  }
+  return janet_wrap_number(r);
 }
 
 #define BIGINT_OPMETHOD(NAME, OP, L, R)                                        \
@@ -195,6 +263,17 @@ static Janet big_int(int32_t argc, Janet *argv) {
     return janet_wrap_abstract(r);                                             \
   }
 
+#define BIGINT_ROPMETHOD(NAME, OP, L, R)                                        \
+  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
+    janet_fixarity(argc, 2);                                                   \
+    bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));                     \
+    bf_init(&bf_ctx, r);                                                       \
+    bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
+    bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
+    bf_##OP(r, R, L, BF_PREC_INF, BF_RNDN);                                    \
+    return janet_wrap_abstract(r);                                             \
+  }
+
 #define BIGINT_LOGICMETHOD(NAME, OP, L, R)                                     \
   static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
     janet_fixarity(argc, 2);                                                   \
@@ -203,6 +282,17 @@ static Janet big_int(int32_t argc, Janet *argv) {
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
     bf_##OP(r, L, R);                                                          \
+    return janet_wrap_abstract(r);                                             \
+  }
+
+#define BIGINT_RLOGICMETHOD(NAME, OP, L, R)                                     \
+  static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
+    janet_fixarity(argc, 2);                                                   \
+    bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));                     \
+    bf_init(&bf_ctx, r);                                                       \
+    bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
+    bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
+    bf_##OP(r, R, L);                                                          \
     return janet_wrap_abstract(r);                                             \
   }
 
@@ -230,6 +320,30 @@ static Janet big_int_div(int32_t argc, Janet *argv) {
   return janet_wrap_abstract(q);
 }
 
+static Janet big_int_rmod(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_init(&bf_ctx, r);
+  bf_init(&bf_ctx, q);
+  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *R = big_coerce_janet_to_int(argv, 1);
+  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  return janet_wrap_abstract(r);
+}
+
+static Janet big_int_rdiv(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_init(&bf_ctx, r);
+  bf_init(&bf_ctx, q);
+  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *R = big_coerce_janet_to_int(argv, 1);
+  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  return janet_wrap_abstract(q);
+}
+
 BIGINT_OPMETHOD(add, add, a, b)
 BIGINT_OPMETHOD(sub, sub, a, b)
 BIGINT_OPMETHOD(mul, mul, a, b)
@@ -237,13 +351,13 @@ BIGINT_OPMETHOD(mul, mul, a, b)
 BIGINT_LOGICMETHOD(and, logic_and, a, b)
 BIGINT_LOGICMETHOD(or, logic_or, a, b)
 BIGINT_LOGICMETHOD (xor, logic_xor, a, b)
-BIGINT_OPMETHOD(radd, add, b, a)
-BIGINT_OPMETHOD(rsub, sub, b, a)
-BIGINT_OPMETHOD(rmul, mul, b, a)
+BIGINT_ROPMETHOD(radd, add, b, a)
+BIGINT_ROPMETHOD(rsub, sub, b, a)
+BIGINT_ROPMETHOD(rmul, mul, b, a)
 //BIGINT_OPMETHOD(rdiv, div, a, b)
-BIGINT_LOGICMETHOD(rand, logic_and, b, a)
-BIGINT_LOGICMETHOD(ror, logic_or, b, a)
-BIGINT_LOGICMETHOD(rxor, logic_xor, b, a)
+BIGINT_RLOGICMETHOD(rand, logic_and, b, a)
+BIGINT_RLOGICMETHOD(ror, logic_or, b, a)
+BIGINT_RLOGICMETHOD(rxor, logic_xor, b, a)
 
 static JanetMethod big_int_methods[] = {{"+", big_int_add},
                                         {"-", big_int_sub},
@@ -256,13 +370,14 @@ static JanetMethod big_int_methods[] = {{"+", big_int_add},
                                         {"r+", big_int_radd},
                                         {"r-", big_int_rsub},
                                         {"r*", big_int_rmul},
-                                        {"r/", big_int_div},
-                                        {"r%", big_int_mod},
+                                        {"r/", big_int_rdiv},
+                                        {"r%", big_int_rmod},
                                         {"r&", big_int_rand},
                                         {"r|", big_int_ror},
                                         {"r^", big_int_rxor},
                                         //{"<<", big_int_lshift},
                                         //{">>", big_int_rshift},
+                                        {"compare", big_int_compare_meth},
                                         {NULL, NULL}};
 
 static int big_int_get(void *p, Janet key, Janet *out) {
