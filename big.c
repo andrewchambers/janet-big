@@ -191,47 +191,56 @@ static Janet big_int(int32_t argc, Janet *argv) {
     bf_init(&bf_ctx, r);                                                       \
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
-    printf("op: %s name: %s\n", #OP, #NAME);\
-    bf_print_str("l", L);\
-    bf_print_str("r", R);\
     bf_##OP(r, L, R, BF_PREC_INF, BF_RNDN);                                    \
-    bf_print_str("res", r);\
     return janet_wrap_abstract(r);                                             \
   }
 
-#define BIGINT_LOGICMETHOD(NAME, OP, L, R)                                        \
+#define BIGINT_LOGICMETHOD(NAME, OP, L, R)                                     \
   static Janet big_int_##NAME(int32_t argc, Janet *argv) {                     \
     janet_fixarity(argc, 2);                                                   \
     bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));                     \
     bf_init(&bf_ctx, r);                                                       \
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
-    bf_##OP(r, L, R);                                    \
+    bf_##OP(r, L, R);                                                          \
     return janet_wrap_abstract(r);                                             \
   }
-
 
 static Janet big_int_mod(int32_t argc, Janet *argv) {
   janet_fixarity(argc, 2);
   bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_init(&bf_ctx, r);
+  bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_rem(r, L, R, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDN, BF_RNDN);
   return janet_wrap_abstract(r);
+}
+
+static Janet big_int_div(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_init(&bf_ctx, r);
+  bf_init(&bf_ctx, q);
+  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *R = big_coerce_janet_to_int(argv, 1);
+  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  return janet_wrap_abstract(q);
 }
 
 BIGINT_OPMETHOD(add, add, a, b)
 BIGINT_OPMETHOD(sub, sub, a, b)
 BIGINT_OPMETHOD(mul, mul, a, b)
-BIGINT_OPMETHOD(div, div, a, b)
+//BIGINT_OPMETHOD(div, div, a, b)
 BIGINT_LOGICMETHOD(and, logic_and, a, b)
 BIGINT_LOGICMETHOD(or, logic_or, a, b)
 BIGINT_LOGICMETHOD (xor, logic_xor, a, b)
 BIGINT_OPMETHOD(radd, add, b, a)
 BIGINT_OPMETHOD(rsub, sub, b, a)
 BIGINT_OPMETHOD(rmul, mul, b, a)
-BIGINT_OPMETHOD(rdiv, div, a, b)
+//BIGINT_OPMETHOD(rdiv, div, a, b)
 BIGINT_LOGICMETHOD(rand, logic_and, b, a)
 BIGINT_LOGICMETHOD(ror, logic_or, b, a)
 BIGINT_LOGICMETHOD(rxor, logic_xor, b, a)
@@ -247,7 +256,7 @@ static JanetMethod big_int_methods[] = {{"+", big_int_add},
                                         {"r+", big_int_radd},
                                         {"r-", big_int_rsub},
                                         {"r*", big_int_rmul},
-                                        {"r/", big_int_rdiv},
+                                        {"r/", big_int_div},
                                         {"r%", big_int_mod},
                                         {"r&", big_int_rand},
                                         {"r|", big_int_ror},
