@@ -8,7 +8,7 @@
   (/ (+ acc (* num n)) den))
 
 (defn eliminate-digit [d]
-  (set acc (- acc (* den d)))
+  (-= acc (* den d))
   (*= acc 10)
   (*= num 10))
 
@@ -19,7 +19,7 @@
   (*= den k2)
   (*= num k))
 
-(def n 10)
+(def n 10000)
 (var i 0)
 (var k 0)
 (while (< i n)
@@ -27,12 +27,14 @@
   (next-term k)
   (when (<= num acc)
     (def d (extract-digit 3))
-    (when (= d (extract-digit 4))
+    (def e (extract-digit 4))
+    (when (= d e)
       (prin d)
       (++ i)
       (when (= (% i 10) 0)
         (printf "\t: %d" i))
-      (eliminate-digit d))))
+      (eliminate-digit d)
+      )))
 
 
 

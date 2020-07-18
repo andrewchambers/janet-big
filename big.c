@@ -304,7 +304,7 @@ static Janet big_int_mod(int32_t argc, Janet *argv) {
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   return janet_wrap_abstract(r);
 }
 
@@ -316,7 +316,7 @@ static Janet big_int_div(int32_t argc, Janet *argv) {
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   return janet_wrap_abstract(q);
 }
 
