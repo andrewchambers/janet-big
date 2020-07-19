@@ -310,13 +310,19 @@ static Janet big_int_mod(int32_t argc, Janet *argv) {
 
 static Janet big_int_div(int32_t argc, Janet *argv) {
   janet_fixarity(argc, 2);
-  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  //bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_init(&bf_ctx, r);
+  //bf_init(&bf_ctx, r);
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  //bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  if (bf_cmpu(L, R) < 0) {
+    bf_set_ui(q, 0);
+  } else {
+    bf_div(q, L, R, bf_max(L->expn - R->expn + 1, 2), BF_RNDZ);
+    bf_rint(q, BF_RNDZ);
+  }
   return janet_wrap_abstract(q);
 }
 
