@@ -1,5 +1,7 @@
 (import ../build/big :as big)
 
+(defn all-tests [] 
+
 # stringification
 (assert (= "77" (string (big/int 77))))
 
@@ -68,4 +70,13 @@
 
 (assert (= (big/int 120) (fact 5)))
 (assert (= (fact 100) (big/int "93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000")))
+
+)
+
+
+(all-tests)
+
+# To test memory uncomment below line to run this suite many times 
+# and watch for memory unbounded memory increase in top
+#(repeat 1000000 (all-tests))
 
