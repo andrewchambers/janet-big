@@ -7,5 +7,5 @@
 
 (declare-native
     :name "big"
-    :cflags [;default-cflags "-O2" "-flto"]
+    :cflags ["-Wall" "-O2" "-flto"]
     :source ["big.c" "libbf.c" "cutils.c"])
