@@ -73,10 +73,12 @@
 
 )
 
-
 (all-tests)
 
-# To test memory uncomment below line to run this suite many times 
-# and watch for memory unbounded memory increase in top
-#(repeat 1000000 (all-tests))
+# Optional simplistic memory testing:
+# To test memory run with "janet test/big.janet -m"
+# and watch "top" for any unbounded memory increases
+
+(when (= "-m" (get (dyn :args) 1 ""))
+  (repeat 1000000 (all-tests)))
 
