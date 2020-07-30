@@ -45,14 +45,6 @@
 (assert (= 0 (compare 7 (big/int 7))))
 (assert (= 1 (compare 8 (big/int 7))))
 
-# test polymorphic comparison -- forward, reverse for janet strings
-(assert (= -1 (compare (big/int 7) "8")))
-(assert (= 0 (compare (big/int 7) "7")))
-(assert (= 1 (compare (big/int 7) "6")))
-(assert (= -1 (compare "6" (big/int 7))))
-(assert (= 0 (compare "7" (big/int 7))))
-(assert (= 1 (compare "8" (big/int 7))))
-
 # test polymorphic comparison -- forward, reverse for u64/s64
 (assert (= -1 (compare (big/int 7) (int/u64 8))))
 (assert (= 0 (compare (big/int 7) (int/s64 7))))
@@ -60,6 +52,13 @@
 (assert (= -1 (compare (int/s64 -6) (big/int 7))))
 (assert (= 0 (compare (int/u64 7) (big/int 7))))
 (assert (= 1 (compare (int/s64 8) (big/int 7))))
+
+# confirm no automatic string promotion in math
+# (https://github.com/andrewchambers/janet-big/issues/6)
+(do
+  (def [ok err] (protect (+ (big/int 5) "234")))
+  (assert (not ok))
+  )
 
 # factorial
 (defn fact [n]
