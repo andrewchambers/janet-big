@@ -6,9 +6,13 @@ A big calculator library for janet. Currently only big integers are supported
 Janet-big supports 
 
 * conversion to big/int from Janet numbers, strings, int/u64 and int/s64
-* all the basic Janet math operators, i.e.  +, -, *, /, %, band, bor, bxor
+* conversion to string from big/int (using `string` function)
+* all the basic Janet math operators, i.e.  +, -, *, /, %, band, bor, bxor,
+  where at least one operand is a big/int, and the other may be big/int
+  or number or int/u64 or int/s64.
 * comparison operations (between big/ints) and
-* polymorphic comparison (big/int vs Janet numbers and int/u64 int/s64).
+* polymorphic comparison (big/int vs Janet numbers and int/u64 int/s64,
+  but **not** vs strings).
 
 # Install
 
