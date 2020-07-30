@@ -1,6 +1,14 @@
 # big
 
-A big calculator library for janet. Currently only big integers are supported.
+A big calculator library for janet. Currently only big integers are supported
+(no floating point).
+
+Janet-big supports 
+
+* conversion to big/int from Janet numbers, strings, int/u64 and int/s64
+* all the basic Janet math operators, i.e.  +, -, *, /, %, band, bor, bxor
+* comparison operations (between big/ints) and
+* polymorphic comparison (big/int vs Janet numbers and int/u64 int/s64).
 
 # Install
 
@@ -9,6 +17,7 @@ jpm install
 ```
 
 # Quick Usage
+
 
 ```
 (import big)
