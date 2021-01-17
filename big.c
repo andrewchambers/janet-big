@@ -132,12 +132,6 @@ static bf_t *big_coerce_janet_to_int(Janet *argv, int i) {
     case JANET_NUMBER:
       bf_set_si(b, (int64_t) janet_unwrap_number(argv[i]));
       break;
-    case JANET_STRING: {
-       JanetString s = janet_unwrap_string(argv[i]);
-       if (digits_to_big(b, s, janet_string_length(s)) != 0)
-         janet_panicf("unable to convert string to big/int");
-       break;
-     }
     case JANET_ABSTRACT: {
        void *abst = janet_unwrap_abstract(argv[i]);
        if (janet_abstract_type(abst) == &janet_s64_type) {
@@ -211,20 +205,6 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
     r = bf_cmp(a, &b);
     bf_delete(&b);
     break;
-  case JANET_STRING: {
-      JanetString s = janet_unwrap_string(argv[1]);
-      bf_init(&bf_ctx, &b);
-      if (digits_to_big(&b, s, janet_string_length(s)) != 0) {
-        // should this be an error?  comparing big/int to non-numeric string
-        // this will fall back to primitive comparison which might surprise
-        // i.e. (< (big/int 7) "9") is true but (< (big/int 7) "x") uses
-        // Janet's built-in cmp which will compare based on type number
-        return janet_wrap_nil();
-      }
-      r = bf_cmp(a, &b);
-      bf_delete(&b);
-      break;
-    }
   case JANET_ABSTRACT: {
        void *abst = janet_unwrap_abstract(argv[1]);
        if (janet_abstract_type(abst) == &janet_s64_type) {
