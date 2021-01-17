@@ -29,8 +29,9 @@ static int big_int_gc(void *p, size_t len) {
 
 static char *big_digits(bf_t *b, size_t *size) {
   size_t sz;
-  size_t prec = b->len * LIMB_BITS; // &&& correct? too high?
-  char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
+  //size_t prec = b->len * LIMB_BITS; // &&& correct? too high?
+  //char *digits = bf_ftoa(&sz, b, 10, prec, BF_RNDN | BF_FTOA_FORMAT_FREE_MIN);
+  char *digits = bf_ftoa(&sz, b, 10, 0, BF_RNDZ | BF_FTOA_FORMAT_FRAC);
   if (size != NULL)
     *size = sz;
   return digits;
@@ -88,7 +89,7 @@ static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
 static int digits_to_big(bf_t *b, const uint8_t *bytes, size_t sz) {
   (void) sz;
   //printf("string is: %s\n", bytes);
-  int r = bf_atof(b, (char *)bytes, 0, 10, BF_PREC_INF, BF_ATOF_NO_NAN_INF);
+  int r = bf_atof(b, (char *)bytes, 0, 10, BF_PREC_INF, BF_RNDZ | BF_ATOF_NO_NAN_INF);
   //bf_print_str("resulting bf", b);
   return r;
 }
@@ -239,7 +240,7 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
     bf_init(&bf_ctx, r);                                                       \
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
-    bf_##OP(r, L, R, BF_PREC_INF, BF_RNDN);                                    \
+    bf_##OP(r, L, R, BF_PREC_INF, BF_RNDZ);                                    \
     return janet_wrap_abstract(r);                                             \
   }
 
@@ -250,7 +251,7 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
     bf_init(&bf_ctx, r);                                                       \
     bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
     bf_t *R = big_coerce_janet_to_int(argv, 1);                                \
-    bf_##OP(r, R, L, BF_PREC_INF, BF_RNDN);                                    \
+    bf_##OP(r, R, L, BF_PREC_INF, BF_RNDZ);                                    \
     return janet_wrap_abstract(r);                                             \
   }
 
@@ -290,19 +291,13 @@ static Janet big_int_mod(int32_t argc, Janet *argv) {
 
 static Janet big_int_div(int32_t argc, Janet *argv) {
   janet_fixarity(argc, 2);
-  //bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
-  //bf_init(&bf_ctx, r);
+  bf_init(&bf_ctx, r);
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  //bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
-  if (bf_cmpu(L, R) < 0) {
-    bf_set_ui(q, 0);
-  } else {
-    bf_div(q, L, R, bf_max(L->expn - R->expn + 1, 2), BF_RNDZ);
-    bf_rint(q, BF_RNDZ);
-  }
+  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   return janet_wrap_abstract(q);
 }
 
@@ -314,7 +309,7 @@ static Janet big_int_rmod(int32_t argc, Janet *argv) {
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   return janet_wrap_abstract(r);
 }
 
@@ -326,7 +321,7 @@ static Janet big_int_rdiv(int32_t argc, Janet *argv) {
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDN, BF_RNDN);
+  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   return janet_wrap_abstract(q);
 }
 
