@@ -2,7 +2,7 @@
 
 (defn all-tests [] 
 
-# stringification
+# stringification (low precision)
 (assert (= "77" (string (big/int 77))))
 
 # marshall and unmarshall
@@ -69,6 +69,19 @@
 
 (assert (= (big/int 120) (fact 5)))
 (assert (= (fact 100) (big/int "93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000")))
+
+# Stringification of long integers -- never enter exponential mode
+
+(assert (= (string (* (big/int 1) ;(range 1 73))) "61234458376886086861524070385274672740778091784697328983823014963978384987221689274204160000000000000000") "precision")
+
+(defn pow [x y] (product (seq [:repeat y] x))) # hack
+(assert
+  (not
+    (some
+      |(string/find "e" $)
+      (seq [y :in [1000 10000 100000]]
+        (string (pow (big/int 2) y))))))
+(assert (not (string/find "e" (string (* (big/int "1000000000000000000") (pow (big/int 2) 10000))))))
 
 )
 
