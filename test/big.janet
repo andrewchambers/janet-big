@@ -14,11 +14,19 @@
 (assert (= (big/int 8) (* (big/int 4) 2)))
 (assert (= (big/int 77) (* 11 (big/int 7))))
 
-# forward and reverse subtraction and division
+# forward and reverse subtraction and division and mod
 (assert (= (big/int 5) (- (big/int 8) 3)))
 (assert (= (big/int 5) (- 8 (big/int 3))))
 (assert (= (string (/ 4 (big/int 2))) "2"))
 (assert (= (string (/ (big/int 4) 2)) "2"))
+
+# forward and reverse mod
+(assert (= (big/int 708) (% (big/int "23456453431782954574257") 4923)))
+(assert (= (big/int 1427) (% 2345678992 (big/int 4711))))
+
+# divmod
+(pp (big/divmod (big/int "23456453431782954574257") (big/int 4923)))
+(assert (deep= (tuple (big/int 4764666551245775863) (big/int 708)) (big/divmod (big/int "23456453431782954574257") (big/int 4923))))
 
 # test that you can create a big/int from string, number, int/s64 int/u64
 (assert (= (big/int "77") (big/int 77) (big/int (int/s64 77)) (big/int (int/u64 77))))
@@ -83,6 +91,9 @@
         (string (pow (big/int 2) y))))))
 (assert (not (string/find "e" (string (* (big/int "1000000000000000000") (pow (big/int 2) 10000))))))
 
+# Issue10 from @leahneukerchen -- test initializing big/int from large float
+(assert (= (big/int "100000000000000000000") (big/int 1e20)))
+(assert (= (big/int "1267650600228229401496703205376") (big/int 1.2676506002282294e+30)))
 )
 
 (all-tests)

@@ -162,8 +162,15 @@ static Janet big_int(int32_t argc, Janet *argv) {
 
   switch (janet_type(argv[0])) {
   case JANET_NUMBER:
-    bf_set_si(b, (int64_t) janet_unwrap_number(argv[0]));
-    break;
+    {
+      double x = janet_unwrap_number(argv[0]);
+      if (!isfinite(x)) {
+        janet_panicf("unable to initialize big int from non-finite number");
+      } else {
+        bf_set_float64(b, x);
+      }
+      break;
+    }
   case JANET_STRING: {
       JanetString s = janet_unwrap_string(argv[0]);
       if (digits_to_big(b, s, janet_string_length(s)) != 0)
@@ -277,7 +284,7 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
     return janet_wrap_abstract(r);                                             \
   }
 
-static Janet big_int_mod(int32_t argc, Janet *argv) {
+static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_t **rp) {
   janet_fixarity(argc, 2);
   bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
@@ -285,44 +292,59 @@ static Janet big_int_mod(int32_t argc, Janet *argv) {
   bf_init(&bf_ctx, q);
   bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
-  return janet_wrap_abstract(r);
+  int e;
+  if (reverse) {
+    e = bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  } else {
+    e = bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  }
+  if (e == BF_ST_INVALID_OP || e == BF_ST_DIVIDE_ZERO) {
+    bf_delete(q);
+    bf_delete(r);
+    janet_panicf("Invalid argument to divide");
+  } 
+  *qp = q;
+  *rp = r;
+  return;
 }
 
 static Janet big_int_div(int32_t argc, Janet *argv) {
-  janet_fixarity(argc, 2);
-  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_init(&bf_ctx, r);
-  bf_init(&bf_ctx, q);
-  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
-  bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 0, &q, &r);
+  bf_delete(r);
   return janet_wrap_abstract(q);
 }
 
-static Janet big_int_rmod(int32_t argc, Janet *argv) {
-  janet_fixarity(argc, 2);
-  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_init(&bf_ctx, r);
-  bf_init(&bf_ctx, q);
-  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
-  bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+static Janet big_int_mod(int32_t argc, Janet *argv) {
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 0, &q, &r);
+  bf_delete(q);
   return janet_wrap_abstract(r);
 }
 
 static Janet big_int_rdiv(int32_t argc, Janet *argv) {
-  janet_fixarity(argc, 2);
-  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_init(&bf_ctx, r);
-  bf_init(&bf_ctx, q);
-  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
-  bf_t *R = big_coerce_janet_to_int(argv, 1);
-  bf_divrem(q, r, R, L, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 1, &q, &r);
+  bf_delete(r);
   return janet_wrap_abstract(q);
+}
+
+static Janet big_int_rmod(int32_t argc, Janet *argv) {
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 1, &q, &r);
+  bf_delete(q);
+  return janet_wrap_abstract(r);
+}
+
+static Janet big_int_divmod(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 0, &q, &r);
+
+  Janet tup[2];
+  tup[0] = janet_wrap_abstract(q);
+  tup[1] = janet_wrap_abstract(r);
+  return janet_wrap_tuple(janet_tuple_n(tup, 2));
 }
 
 BIGINT_OPMETHOD(add, add, a, b)
@@ -368,10 +390,21 @@ static int big_int_get(void *p, Janet key, Janet *out) {
   return janet_getmethod(janet_unwrap_keyword(key), big_int_methods, out);
 }
 
-static const JanetReg cfuns[] = {{"int", big_int,
-                                  "(big/int &opt v)\n\n"
-                                  "Create a new integer."},
-                                 {NULL, NULL, NULL}};
+static const JanetReg cfuns[] = {
+  {"int", big_int,
+    "(big/int v)\n\n"
+      "Create a new big/int with value of v -- which can be another big/int, a Janet number, int/u64, int/s64, or a string representing a decimal number."},
+  {"divmod", big_int_divmod,
+    "(big/divmod x y)\n\n"
+      "Divide x by y, returning [quotient, remainder] as big/ints. (x bigint, y coerceable to bigint, y != 0)"},
+  /*
+  {"pow", big_int_pow,
+    "(big/pow x y)\n\n"
+      "Create a new big/int equal to x raised to the y power.  (x bigint, y coerceable to bigint, y >= 0)"},
+  {"sqrt", big_int_sqrt,
+    "(big/sqrt x)\n\n"
+      "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"}, */
+  {NULL, NULL, NULL}};
 
 JANET_MODULE_ENTRY(JanetTable *env) {
   bf_context_init(&bf_ctx, big_bf_realloc, NULL);
