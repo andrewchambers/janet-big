@@ -12,12 +12,13 @@ Janet-big supports
   or number or int/u64 or int/s64.
 * comparison operations (between big/ints) and
 * polymorphic comparison (big/int vs Janet numbers and int/u64 int/s64,
-  but **not** vs strings).
+  but **not** vs strings).  This means predicates from the core like
+  even? odd? zero? pos? neg? and one? should work correctly.
 * includes big/pow (exponentiation), big/sqrt (integer square root), and
   big/divmod (quotient and remainder returned as a tuple.  These functions
   also accept numbers, big/ints, or int/u64,int/s64 as arguments.
 * **Note** -- other numeric functions in the Janet core, like the math/ 
-  functions and even? odd? will generally not work properly with big/ints.
+  will generally not work with big/ints.
 * **Note** -- of the functions and methods within: only big/int accepts strings 
   as arguments and converts to big/int.  The other functions/methods will generally
   coerce arguments to big/int as needed, but only from Janet numbers, int/u64, int/s64.
