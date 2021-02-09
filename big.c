@@ -289,7 +289,7 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
     return janet_wrap_abstract(r);                                             \
   }
 
-static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_t **rp) {
+static void big_int_divop(int32_t argc, Janet *argv, int reverse, int mod, bf_t **qp, bf_t **rp) {
   janet_fixarity(argc, 2);
   bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_init(&bf_ctx, r);
@@ -307,6 +307,13 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_
   if (e == BF_ST_INVALID_OP || e == BF_ST_DIVIDE_ZERO) {
     janet_panicf("Invalid argument to divide");
   } 
+  if (mod && L->sign != R->sign) {
+    if (reverse) {
+      bf_add(r, r, L, BF_PREC_INF, BF_RNDZ);                                    \
+    } else {
+      bf_add(r, r, R, BF_PREC_INF, BF_RNDZ);                                    \
+    }
+  }
   *qp = q;
   *rp = r;
   return;
@@ -314,32 +321,55 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_
 
 static Janet big_int_div(int32_t argc, Janet *argv) {
   bf_t *q, *r;
-  big_int_divop(argc, argv, 0, &q, &r);
+  big_int_divop(argc, argv, 0, 0, &q, &r);
   return janet_wrap_abstract(q);
+}
+
+static Janet big_int_rem(int32_t argc, Janet *argv) {
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 0, 0, &q, &r);
+  return janet_wrap_abstract(r);
 }
 
 static Janet big_int_mod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
-  big_int_divop(argc, argv, 0, &q, &r);
+  big_int_divop(argc, argv, 0, 1, &q, &r);
   return janet_wrap_abstract(r);
 }
 
 static Janet big_int_rdiv(int32_t argc, Janet *argv) {
   bf_t *q, *r;
-  big_int_divop(argc, argv, 1, &q, &r);
+  big_int_divop(argc, argv, 1, 0, &q, &r);
   return janet_wrap_abstract(q);
+}
+
+static Janet big_int_rrem(int32_t argc, Janet *argv) {
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 1, 0, &q, &r);
+  return janet_wrap_abstract(r);
 }
 
 static Janet big_int_rmod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
-  big_int_divop(argc, argv, 1, &q, &r);
+  big_int_divop(argc, argv, 1, 1, &q, &r);
   return janet_wrap_abstract(r);
+}
+
+static Janet big_int_divrem(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *q, *r;
+  big_int_divop(argc, argv, 0, 0, &q, &r);
+
+  Janet tup[2];
+  tup[0] = janet_wrap_abstract(q);
+  tup[1] = janet_wrap_abstract(r);
+  return janet_wrap_tuple(janet_tuple_n(tup, 2));
 }
 
 static Janet big_int_divmod(int32_t argc, Janet *argv) {
   janet_fixarity(argc, 2);
   bf_t *q, *r;
-  big_int_divop(argc, argv, 0, &q, &r);
+  big_int_divop(argc, argv, 0, 1, &q, &r);
 
   Janet tup[2];
   tup[0] = janet_wrap_abstract(q);
@@ -366,7 +396,7 @@ static JanetMethod big_int_methods[] = {{"+", big_int_add},
                                         {"-", big_int_sub},
                                         {"*", big_int_mul},
                                         {"/", big_int_div},
-                                        {"%", big_int_mod},
+                                        {"%", big_int_rem},
                                         {"mod", big_int_mod},
                                         {"&", big_int_and},
                                         {"|", big_int_or},
@@ -375,7 +405,7 @@ static JanetMethod big_int_methods[] = {{"+", big_int_add},
                                         {"r-", big_int_rsub},
                                         {"r*", big_int_rmul},
                                         {"r/", big_int_rdiv},
-                                        {"r%", big_int_rmod},
+                                        {"r%", big_int_rrem},
                                         {"rmod", big_int_rmod},
                                         {"r&", big_int_rand},
                                         {"r|", big_int_ror},
@@ -421,9 +451,12 @@ static const JanetReg cfuns[] = {
   {"int", big_int,
     "(big/int v)\n\n"
       "Create a new big/int with value of v -- which can be another big/int, a Janet number, int/u64, int/s64, or a string representing a decimal number.  In other functions in this module, arguments can generally be any of the above, except strings.  Strings are only accepted in big/int."},
+  {"divrem", big_int_divrem,
+    "(big/divrem x y)\n\n"
+      "Divide x by y, returning [quotient, remainder] as big/ints. (y != 0)"},
   {"divmod", big_int_divmod,
     "(big/divmod x y)\n\n"
-      "Divide x by y, returning [quotient, remainder] as big/ints. (y != 0)"},
+      "Divide x by y, returning [quotient, mod(x,y)] as big/ints. (y != 0)"},
   {"pow", big_int_pow,
     "(big/pow x y)\n\n"
       "Create a new big/int equal to x raised to the y power.  (y >= 0)"},

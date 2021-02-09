@@ -40,6 +40,17 @@
 (assert (= (big/int 1427) (% 2345678992 (big/int 4711))))
 (assert (= (big/int 1427) (mod 2345678992 (big/int 4711))))
 
+# check difference between mod and %
+(assert (= (big/int 2) (% (big/int 5) (big/int 3))))
+(assert (= (big/int -2) (% (big/int -5) (big/int -3))))
+(assert (= (big/int -2) (% (big/int -5) (big/int 3))))
+(assert (= (big/int 2) (% (big/int 5) (big/int -3))))
+
+(assert (= (big/int 2) (mod (big/int 5) (big/int 3))))
+(assert (= (big/int -2) (mod (big/int -5) (big/int -3))))
+(assert (= (big/int 1) (mod (big/int -5) (big/int 3))))
+(assert (= (big/int -1) (mod (big/int 5) (big/int -3))))
+
 # predicates from the core (which support polymorphic comparison)
 (assert (even? (big/int 22)))
 (assert (odd? (big/int 3)))
@@ -52,6 +63,15 @@
 (assert (deep= (tuple (big/int "4764666551245775863") (big/int 708)) (big/divmod (big/int "23456453431782954574257") (big/int 4923))))
 (assert (deep= (tuple (big/int 6) (big/int 3)) (big/divmod 123 20))) # argument coercion
 (assert-error "divide by zero" (big/divmod 123 0))
+
+#divrem
+(assert (deep= (tuple (big/int "4764666551245775863") (big/int 708)) (big/divrem (big/int "23456453431782954574257") (big/int 4923))))
+(assert (deep= (tuple (big/int 6) (big/int 3)) (big/divrem 123 20))) # argument coercion
+(assert-error "divide by zero" (big/divrem 123 0))
+
+# difference between rem and mod for different signed dividend and divisor:
+(assert (deep= (tuple (big/int -1) (big/int 2)) (big/divrem 5 -3)))
+(assert (deep= (tuple (big/int -1) (big/int -1)) (big/divmod 5 -3)))
 
 # test that you can create a big/int from string, number, int/s64 int/u64
 (assert (= (big/int "77") (big/int 77) (big/int (int/s64 77)) (big/int (int/u64 77))))

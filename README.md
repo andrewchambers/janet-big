@@ -7,7 +7,7 @@ Janet-big supports
 
 * conversion to big/int from Janet numbers, strings, int/u64 and int/s64
 * conversion to string from big/int (using `string` function)
-* The basic Janet math operators:  +, -, *, /, %, band, bor, bxor,
+* The basic Janet math operators:  +, -, *, /, %, mod, band, bor, bxor,
   where at least one operand is a big/int, and the other may be big/int
   or number or int/u64 or int/s64.
 * comparison operations (between big/ints) and
