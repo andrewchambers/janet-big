@@ -311,28 +311,28 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_
 static Janet big_int_div(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 0, &q, &r);
-  bf_delete(r);
+  //bf_delete(r);
   return janet_wrap_abstract(q);
 }
 
 static Janet big_int_mod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 0, &q, &r);
-  bf_delete(q);
+  //bf_delete(q);
   return janet_wrap_abstract(r);
 }
 
 static Janet big_int_rdiv(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 1, &q, &r);
-  bf_delete(r);
+  //bf_delete(r);
   return janet_wrap_abstract(q);
 }
 
 static Janet big_int_rmod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 1, &q, &r);
-  bf_delete(q);
+  //bf_delete(q);
   return janet_wrap_abstract(r);
 }
 
@@ -390,6 +390,19 @@ static int big_int_get(void *p, Janet key, Janet *out) {
   return janet_getmethod(janet_unwrap_keyword(key), big_int_methods, out);
 }
 
+static Janet big_int_pow(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 2);
+  bf_t *x = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *y = big_coerce_janet_to_int(argv, 1);
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_init(&bf_ctx, r);
+  int e = bf_pow(r, x, y, BF_PREC_INF, BF_RNDZ);
+  if (e == BF_ST_INVALID_OP)
+    janet_panicf("big/pow invalid operand");
+  return janet_wrap_abstract(r);
+}
+
+
 static const JanetReg cfuns[] = {
   {"int", big_int,
     "(big/int v)\n\n"
@@ -397,10 +410,10 @@ static const JanetReg cfuns[] = {
   {"divmod", big_int_divmod,
     "(big/divmod x y)\n\n"
       "Divide x by y, returning [quotient, remainder] as big/ints. (x bigint, y coerceable to bigint, y != 0)"},
-  /*
   {"pow", big_int_pow,
     "(big/pow x y)\n\n"
       "Create a new big/int equal to x raised to the y power.  (x bigint, y coerceable to bigint, y >= 0)"},
+  /*
   {"sqrt", big_int_sqrt,
     "(big/sqrt x)\n\n"
       "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"}, */
