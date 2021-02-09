@@ -34,9 +34,19 @@
 (assert (= (string (/ (big/int 4) 2)) "2"))
 (assert-error "divide by 0" (/ (big/int 3) 0))
 
-# forward and reverse mod
+# forward and reverse mod and %
 (assert (= (big/int 708) (% (big/int "23456453431782954574257") 4923)))
+(assert (= (big/int 708) (mod (big/int "23456453431782954574257") 4923)))
 (assert (= (big/int 1427) (% 2345678992 (big/int 4711))))
+(assert (= (big/int 1427) (mod 2345678992 (big/int 4711))))
+
+# predicates from the core (which support polymorphic comparison)
+(assert (even? (big/int 22)))
+(assert (odd? (big/int 3)))
+(assert (neg? (big/int -1)))
+(assert (pos? (big/int "12344554456")))
+(assert (one? (big/int 1)))
+(assert (zero? (big/int 0)))
 
 # divmod
 (assert (deep= (tuple (big/int "4764666551245775863") (big/int 708)) (big/divmod (big/int "23456453431782954574257") (big/int 4923))))
