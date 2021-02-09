@@ -20,6 +20,11 @@ static void *big_bf_realloc(void *opaque, void *ptr, size_t size) {
 
 static int big_int_get(void *p, Janet key, Janet *out);
 
+// Any bf_t that gets wrapped into a Janet will get automatically
+// bf_delete on gc.  This means you must make sure you bf_init any
+// bf_t that has been wrapped in a Janet, but also that you do not
+// have to bf_delete any bf_t that has been wrapped in a Janet as
+// the GC will handle it.
 static int big_int_gc(void *p, size_t len) {
   (void)len;
   bf_t *b = (bf_t *)p;
@@ -204,7 +209,7 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
   bf_t *a = (bf_t *)janet_getabstract(argv, 0, &big_int_type);               \
 
   int r;
-  bf_t b;
+  bf_t b; // not wrapped in a Janet: must bf_delete if bf_init called on it
 
   switch (janet_type(argv[1])) {
   case JANET_NUMBER:
@@ -287,10 +292,11 @@ static Janet big_int_compare_meth(int32_t argc, Janet *argv) {
 static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_t **rp) {
   janet_fixarity(argc, 2);
   bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
-  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_init(&bf_ctx, r);
+  bf_t *q = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_init(&bf_ctx, q);
-  bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  //bf_t *L = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *L = big_coerce_janet_to_int(argv, 0);
   bf_t *R = big_coerce_janet_to_int(argv, 1);
   int e;
   if (reverse) {
@@ -299,8 +305,6 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_
     e = bf_divrem(q, r, L, R, BF_PREC_INF, BF_RNDZ, BF_RNDZ);
   }
   if (e == BF_ST_INVALID_OP || e == BF_ST_DIVIDE_ZERO) {
-    bf_delete(q);
-    bf_delete(r);
     janet_panicf("Invalid argument to divide");
   } 
   *qp = q;
@@ -311,28 +315,24 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, bf_t **qp, bf_
 static Janet big_int_div(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 0, &q, &r);
-  //bf_delete(r);
   return janet_wrap_abstract(q);
 }
 
 static Janet big_int_mod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 0, &q, &r);
-  //bf_delete(q);
   return janet_wrap_abstract(r);
 }
 
 static Janet big_int_rdiv(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 1, &q, &r);
-  //bf_delete(r);
   return janet_wrap_abstract(q);
 }
 
 static Janet big_int_rmod(int32_t argc, Janet *argv) {
   bf_t *q, *r;
   big_int_divop(argc, argv, 1, &q, &r);
-  //bf_delete(q);
   return janet_wrap_abstract(r);
 }
 
@@ -392,8 +392,10 @@ static int big_int_get(void *p, Janet key, Janet *out) {
 
 static Janet big_int_pow(int32_t argc, Janet *argv) {
   janet_fixarity(argc, 2);
-  bf_t *x = (bf_t *)janet_getabstract(argv, 0, &big_int_type);
+  bf_t *x = big_coerce_janet_to_int(argv, 0);
   bf_t *y = big_coerce_janet_to_int(argv, 1);
+  if (y->sign)
+    janet_panicf("big/pow called with negative exponent");
   bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
   bf_init(&bf_ctx, r);
   int e = bf_pow(r, x, y, BF_PREC_INF, BF_RNDZ);
@@ -402,21 +404,30 @@ static Janet big_int_pow(int32_t argc, Janet *argv) {
   return janet_wrap_abstract(r);
 }
 
+static Janet big_int_sqrt(int32_t argc, Janet *argv) {
+  janet_fixarity(argc, 1);
+  bf_t *x = big_coerce_janet_to_int(argv, 0);
+  bf_t *r = janet_abstract(&big_int_type, sizeof(bf_t));
+  bf_init(&bf_ctx, r);
+  int e = bf_sqrtrem(r, NULL, x);
+  if (e == BF_ST_INVALID_OP)
+    janet_panicf("big/sqrt invalid operand");
+  return janet_wrap_abstract(r);
+}
 
 static const JanetReg cfuns[] = {
   {"int", big_int,
     "(big/int v)\n\n"
-      "Create a new big/int with value of v -- which can be another big/int, a Janet number, int/u64, int/s64, or a string representing a decimal number."},
+      "Create a new big/int with value of v -- which can be another big/int, a Janet number, int/u64, int/s64, or a string representing a decimal number.  In other functions in this module, arguments can generally be any of the above, except strings.  Strings are only accepted in big/int."},
   {"divmod", big_int_divmod,
     "(big/divmod x y)\n\n"
-      "Divide x by y, returning [quotient, remainder] as big/ints. (x bigint, y coerceable to bigint, y != 0)"},
+      "Divide x by y, returning [quotient, remainder] as big/ints. (y != 0)"},
   {"pow", big_int_pow,
     "(big/pow x y)\n\n"
-      "Create a new big/int equal to x raised to the y power.  (x bigint, y coerceable to bigint, y >= 0)"},
-  /*
+      "Create a new big/int equal to x raised to the y power.  (y >= 0)"},
   {"sqrt", big_int_sqrt,
     "(big/sqrt x)\n\n"
-      "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"}, */
+      "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"}, 
   {NULL, NULL, NULL}};
 
 JANET_MODULE_ENTRY(JanetTable *env) {

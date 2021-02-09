@@ -1,6 +1,19 @@
 (import ../build/big :as big)
+(import spork/test)
 
-(defn all-tests [] 
+(defmacro assert-error
+  "Test passes if forms error."
+  [msg & forms]
+  (def errsym (keyword (gensym)))
+  ~(,assert (= ,errsym (try (do ,;forms) ([_] ,errsym))) ,msg))
+
+(defn all-tests [&opt quiet] 
+(default quiet false)
+(def assert
+  (if quiet assert test/assert))
+
+(unless quiet
+  (test/start-suite 0))
 
 # stringification (low precision)
 (assert (= "77" (string (big/int 77))))
@@ -19,6 +32,7 @@
 (assert (= (big/int 5) (- 8 (big/int 3))))
 (assert (= (string (/ 4 (big/int 2))) "2"))
 (assert (= (string (/ (big/int 4) 2)) "2"))
+(assert-error "divide by 0" (/ (big/int 3) 0))
 
 # forward and reverse mod
 (assert (= (big/int 708) (% (big/int "23456453431782954574257") 4923)))
@@ -26,6 +40,8 @@
 
 # divmod
 (assert (deep= (tuple (big/int "4764666551245775863") (big/int 708)) (big/divmod (big/int "23456453431782954574257") (big/int 4923))))
+(assert (deep= (tuple (big/int 6) (big/int 3)) (big/divmod 123 20))) # argument coercion
+(assert-error "divide by zero" (big/divmod 123 0))
 
 # test that you can create a big/int from string, number, int/s64 int/u64
 (assert (= (big/int "77") (big/int 77) (big/int (int/s64 77)) (big/int (int/u64 77))))
@@ -60,6 +76,17 @@
 (assert (= 0 (compare (int/u64 7) (big/int 7))))
 (assert (= 1 (compare (int/s64 8) (big/int 7))))
 
+# Test sqrt
+(assert (= (big/sqrt (big/int "12345678987654321234567890987654321")) (big/int "111111111000000001")))
+(assert (= (big/sqrt 50) (big/int 7)))  # argument coercion
+(assert-error "negative sqrt" (big/sqrt (big/int -50)))
+
+# Test pow
+(defn pow [x y] (product (seq [:repeat y] x))) # hack
+(assert (= (pow (big/int 234) 567) (big/pow 234 567)))
+(assert-error "negative exponent" (big/pow 234 -5))
+(assert (= (big/int -125) (big/pow -5 3)) "negative base")
+
 # confirm no automatic string promotion in math
 # (https://github.com/andrewchambers/janet-big/issues/6)
 (do
@@ -81,7 +108,6 @@
 
 (assert (= (string (* (big/int 1) ;(range 1 73))) "61234458376886086861524070385274672740778091784697328983823014963978384987221689274204160000000000000000") "precision")
 
-(defn pow [x y] (product (seq [:repeat y] x))) # hack
 (assert
   (not
     (some
@@ -94,6 +120,9 @@
 # Issue10 from @leahneukerchen -- test initializing big/int from large float
 (assert (= (big/int "100000000000000000000") (big/int 1e20)))
 (assert (= (big/int "1267650600228229401496703205376") (big/int 1.2676506002282294e+30)))
+
+(unless quiet
+  (test/end-suite))
 )
 
 (all-tests)
@@ -103,5 +132,5 @@
 # and watch "top" for any unbounded memory increases
 
 (when (= "-m" (get (dyn :args) 1 ""))
-  (repeat 1000000 (all-tests)))
+  (repeat 1000000 (all-tests true)))
 
