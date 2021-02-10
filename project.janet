@@ -3,7 +3,8 @@
   :author "Andrew Chambers"
   :license "MIT"
   :url "https://github.com/andrewchambers/janet-big"
-  :repo "git+https://github.com/andrewchambers/janet-big.git")
+  :repo "git+https://github.com/andrewchambers/janet-big.git"
+  :dependencies ["https://github.com/janet-lang/spork.git"])
 
 (declare-native
     :name "big"
