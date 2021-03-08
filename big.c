@@ -91,11 +91,66 @@ static void big_int_marshal(void *p, JanetMarshalContext *ctx) {
   bf_free(&bf_ctx, digits);
 }
 
-static int digits_to_big(bf_t *b, const uint8_t *bytes, size_t sz) {
-  (void) sz;
-  //printf("string is: %s\n", bytes);
+static int digits_to_big(bf_t *b, const uint8_t *jstring, size_t sz) {
+  // Safe to assume that jstring (which is a janet_string) is a zero terminated
+  // cstring. (per discussion w/ @bakpakin on gitter.)  But you need to check for
+  // embedded zeros.
+  char *bytes = (char *) jstring;
+  size_t ln = strlen(bytes);
+  if (ln < sz) {
+    // allow for extra zeros at end due to behavior of unmarshall
+    int found_nonzero = 0;
+    for (int i = ln; i < sz; i++) {
+      found_nonzero += (bytes[i] != 0 ? 1 : 0);
+    }
+    if (found_nonzero)
+      return -1; // embedded zeros not at end
+    sz = ln;
+  }
+
+  const char *p = bytes;
+  if (*p == '-') p++;
+  int nd = 0;
+  int has_underscore = 0;
+  int most_recent_digit_is_underscore = 0;
+  const char *end = bytes + sz;
+  for (;p < end; p++) {
+    most_recent_digit_is_underscore = 0;
+    if ((*p < '0' || *p > '9') && *p != '_')
+      return -1;
+    if (*p == '_') {
+      // underscore can not be first digit
+      if (nd == 0)
+        return -1; 
+      has_underscore++;
+      most_recent_digit_is_underscore = 1;
+    } else {
+      nd++;
+    }
+  }
+  if (nd == 0)
+    return -1;
+  if (most_recent_digit_is_underscore)
+    return -1;
+
+  if (has_underscore) {
+    char *buf = (char *)janet_smalloc(sz);
+    p = bytes;
+    end = bytes + sz;
+    char *t = buf;
+    for ( ; p < end; p++) {
+      if (*p != '_') {
+        *t = *p;
+        t++;
+      }
+    }
+    bytes = buf;
+  }
+
   int r = bf_atof(b, (char *)bytes, 0, 10, BF_PREC_INF, BF_RNDZ | BF_ATOF_NO_NAN_INF);
-  //bf_print_str("resulting bf", b);
+
+  if (has_underscore)
+    janet_sfree(bytes);
   return r;
 }
 
@@ -107,6 +162,7 @@ static void *big_int_unmarshal(JanetMarshalContext *ctx) {
   janet_unmarshal_bytes(ctx, bytes, sz);
   if (bytes[sz-1] != 0)
     janet_panicf("invalid big/int data in unmarshall");
+  // in case of bad data in unmarshall, panic -- don't return nil.
   if (digits_to_big(b, bytes, sz) != 0)
     janet_panic("unable to unmarshall big/int");
   janet_sfree(bytes);
@@ -178,8 +234,9 @@ static Janet big_int(int32_t argc, Janet *argv) {
     }
   case JANET_STRING: {
       JanetString s = janet_unwrap_string(argv[0]);
+      // mirroring janet scan-number, bad input leads to returning nil, not panicing
       if (digits_to_big(b, s, janet_string_length(s)) != 0)
-        janet_panicf("unable to convert string to big/int");
+        return janet_wrap_nil();
       break;
     }
   case JANET_ABSTRACT: {

@@ -151,6 +151,35 @@
 (assert (= (big/int "100000000000000000000") (big/int 1e20)))
 (assert (= (big/int "1267650600228229401496703205376") (big/int 1.2676506002282294e+30)))
 
+# Issue14 from @leahneukerchen -- test return nil for bad characters in input
+(assert (= (big/int "100a") nil) "atof1")
+(assert (= (big/int "a100") nil) "atof2")
+(assert (= (big/int "10$0") nil) "atof3")
+(assert (= (big/int "-0100") (big/int -100)) "atof4")
+(assert (= (big/int "-100") (big/int -100)) "atof5")
+(assert (= (big/int "1-00") nil) "atof6")
+(assert (= (big/int "234-") nil) "atof6")
+(assert (= (big/int "-") nil) "atof6")
+# Issue14 from @leahneukerchen -- allow "_" in big/int strings
+(assert (= (big/int "100_0_0__0") (big/int 100000)) "atof_ok")
+(assert (= (big/int "_100000") nil) "atof_bad1")
+(assert (= (big/int "100000_") nil) "atof_bad2")
+# Issue14 fuzz test marshal/unmarshal since Issue14 adds risk here
+(var rng (math/rng))
+(defn randnum []
+  (def nseg (math/rng-int rng 30))
+  (def str
+    (string/join
+      (seq [:repeat nseg]
+        (string (math/rng-int rng 999999999))))))
+
+(assert
+  (every?
+    (seq [:repeat 10000]
+      (def bigstr (randnum))
+      (= (big/int bigstr) (unmarshal (marshal (big/int bigstr)))))))
+
+
 (unless quiet
   (test/end-suite))
 )
@@ -162,5 +191,5 @@
 # and watch "top" for any unbounded memory increases
 
 (when (= "-m" (get (dyn :args) 1 ""))
-  (repeat 1000000 (all-tests true)))
+  (repeat 10000 (all-tests true)))
 
