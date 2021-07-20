@@ -1,5 +1,6 @@
 (declare-project
   :name "big"
+  :description "A simple big integer library for Janet"
   :author "Andrew Chambers"
   :license "MIT"
   :url "https://github.com/andrewchambers/janet-big"
