@@ -1,4 +1,10 @@
+#if defined(__APPLE__)
+#include <math.h>
+#include <malloc/malloc.h>
+#else
 #include <malloc.h>
+#endif
+
 #include <janet.h>
 #include "libbf.h"
 
@@ -9,11 +15,19 @@ static void *big_bf_realloc(void *opaque, void *ptr, size_t size) {
   // All libbf internal allocations and frees go through this point.
   // Hook this function to figure out GC pressure 
   if (ptr != NULL) {
+    #if defined(__APPLE__)
+    janet_gcpressure(-malloc_size(ptr));
+    #else
     janet_gcpressure(-malloc_usable_size(ptr));
+    #endif
   }
   void *new_alloc = realloc(ptr, size);
   if (new_alloc != NULL) {
+    #if defined(__APPLE__)
+    janet_gcpressure(malloc_size(new_alloc));
+    #else
     janet_gcpressure(malloc_usable_size(new_alloc));
+    #endif
   }
   return new_alloc;
 }
