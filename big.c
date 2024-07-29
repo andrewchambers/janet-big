@@ -1,5 +1,12 @@
-#include <malloc.h>
 #include <janet.h>
+#if defined(JANET_APPLE)
+#include <malloc/malloc.h>
+#elif defined(JANET_BSD)
+#include <malloc_np.h>
+#elif defined(JANET_LINUX) || defined(JANET_WINDOWS)
+#include <malloc.h>
+#endif
+#include <math.h>
 #include "libbf.h"
 
 static bf_context_t bf_ctx; // is this ok?  threads? &&&
@@ -7,13 +14,25 @@ static bf_context_t bf_ctx; // is this ok?  threads? &&&
 static void *big_bf_realloc(void *opaque, void *ptr, size_t size) {
   (void) opaque;
   // All libbf internal allocations and frees go through this point.
-  // Hook this function to figure out GC pressure 
+  // Hook this function to figure out GC pressure
   if (ptr != NULL) {
+#if defined(JANET_APPLE)
+    janet_gcpressure(-malloc_size(ptr));
+#elif defined(JANET_BSD) || defined(JANET_LINUX)
     janet_gcpressure(-malloc_usable_size(ptr));
+#elif defined(JANET_WINDOWS)
+    janet_gcpressure(-_msize(ptr));
+#endif
   }
   void *new_alloc = realloc(ptr, size);
   if (new_alloc != NULL) {
+#if defined(JANET_APPLE)
+    janet_gcpressure(malloc_size(new_alloc));
+#elif defined(JANET_BSD) || defined(JANET_LINUX)
     janet_gcpressure(malloc_usable_size(new_alloc));
+#elif defined(JANET_WINDOWS)
+    janet_gcpressure(_msize(new_alloc));
+#endif
   }
   return new_alloc;
 }
@@ -121,7 +140,7 @@ static int digits_to_big(bf_t *b, const uint8_t *jstring, size_t sz) {
     if (*p == '_') {
       // underscore can not be first digit
       if (nd == 0)
-        return -1; 
+        return -1;
       has_underscore++;
       most_recent_digit_is_underscore = 1;
     } else {
@@ -363,7 +382,7 @@ static void big_int_divop(int32_t argc, Janet *argv, int reverse, int mod, bf_t 
   }
   if (e == BF_ST_INVALID_OP || e == BF_ST_DIVIDE_ZERO) {
     janet_panicf("Invalid argument to divide");
-  } 
+  }
   if (mod && L->sign != R->sign) {
     if (reverse) {
       bf_add(r, r, L, BF_PREC_INF, BF_RNDZ);                                    \
@@ -519,7 +538,7 @@ static const JanetReg cfuns[] = {
       "Create a new big/int equal to x raised to the y power.  (y >= 0)"},
   {"sqrt", big_int_sqrt,
     "(big/sqrt x)\n\n"
-      "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"}, 
+      "Create a new big/int equal to the integer portion of the square root of x. (x bigint >= 0)"},
   {NULL, NULL, NULL}};
 
 JANET_MODULE_ENTRY(JanetTable *env) {
